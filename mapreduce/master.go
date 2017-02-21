@@ -174,3 +174,6 @@ func (mr *Master) killWorkers() []int {
 	}
 	return ntasks
 }
+func main()  {
+	fmt.println("hello")
+}
