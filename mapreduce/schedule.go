@@ -1,6 +1,9 @@
 package mapreduce
 
-import "fmt"
+import (
+	"fmt"
+	"sync"
+)
 
 //
 // schedule() starts and waits for all tasks in the given phase (Map
@@ -30,7 +33,38 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 	// Remember that workers may fail, and that any given worker may finish
 	// multiple tasks.
 	//
-	// TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
-	//
+	var wg sync.WaitGroup
+	for i := 0; i < ntasks; i++ {
+		wg.Add(1)
+		go func(taskNum int) {
+			defer wg.Done()
+
+			/* The for loop is to avoid workers failure
+			   If the call function returns success, the task is successfully taken by this worker. We just
+			   break the for loop and go to next task.
+			   If it returns failure or the reply is lost or RPC timeout, we just fetch a new worker from
+			   channel and assign current task to the new worker.
+			*/
+			for {
+				worker := <- registerChan
+				var args DoTaskArgs
+
+				args.JobName = jobName
+				args.File = mapFiles[taskNum]
+				args.Phase = phase
+				args.TaskNumber = taskNum
+				args.NumOtherPhase = n_other
+				ok := call(worker, "Worker.DoTask", &args, new(struct{}))
+				if ok {
+					go func() {
+						// This server finished the task, and push it into register channel again to take other tasks
+						registerChan <- worker
+					}()
+					break
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
 	fmt.Printf("Schedule: %v phase done\n", phase)
 }
